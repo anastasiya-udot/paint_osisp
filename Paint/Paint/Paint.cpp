@@ -34,7 +34,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	LoadString(hInstance, IDC_PAINT, szWindowClass, MAX_LOADSTRING);
 	MyRegisterClass(hInstance);
 
-	// ¬ыполнить инициализацию приложени€:
+	// Perform application initialization
 	if (!InitInstance (hInstance, nCmdShow))
 	{
 		return FALSE;

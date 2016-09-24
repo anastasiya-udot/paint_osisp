@@ -16,6 +16,13 @@
 #define IDC_MYICON				2
 #ifndef IDC_STATIC
 #define IDC_STATIC				-1
+#define ID_BRUSH_COLOR			200
+#define ID_PEN_COLOR			201
+#define ID_PAINT				203
+#define ID_SIZE_1				3000
+#define ID_SIZE_2				3010
+#define ID_SIZE_3				3020
+#define ID_SIZE_4				3030
 #endif
 // Следующие стандартные значения для новых объектов
 //

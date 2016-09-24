@@ -1,35 +1,45 @@
-// Paint.cpp: определяет точку входа для приложения.
-//
-
 #include "stdafx.h"
 #include "Paint.h"
+#include <windowsx.h>
+#include <commdlg.h>
 
 #define MAX_LOADSTRING 100
 
-// Глобальные переменные:
-HINSTANCE hInst;								// текущий экземпляр
-TCHAR szTitle[MAX_LOADSTRING];					// Текст строки заголовка
-TCHAR szWindowClass[MAX_LOADSTRING];			// имя класса главного окна
+HINSTANCE hInst;								// handle of the application instance
+TCHAR szTitle[MAX_LOADSTRING];					// title
+TCHAR szWindowClass[MAX_LOADSTRING];			// main window's class name
 
-// Отправить объявления функций, включенных в этот модуль кода:
+// The following functions are included in this module
 ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
+//COLORREF ShowColorDialog(HWND, COLORREF);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 
-int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
-                     _In_opt_ HINSTANCE hPrevInstance,
-                     _In_ LPTSTR    lpCmdLine,
-                     _In_ int       nCmdShow)
+
+HPEN hPen = NULL;
+HBRUSH hBrush = NULL;
+BOOL fDraw = FALSE;
+POINT ptPrevious = { 0 };
+CHOOSECOLOR colorDlg; // struct of standart color dialog
+COLORREF colors[16]; //palette
+static DWORD rgbCurrent;
+static HMENU menuBar;
+static int penWidth = 1;
+
+
+int APIENTRY _tWinMain(_In_ HINSTANCE hInstance, // application instance descriptor	
+                     _In_opt_ HINSTANCE hPrevInstance, //this parameter is obsolete
+                     _In_ LPTSTR    lpCmdLine,  //command line handle, this paramter is obsolete
+                     _In_ int       nCmdShow)	//window's state in the initial demonstration
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
- 	// TODO: разместите код здесь.
 	MSG msg;
-	HACCEL hAccelTable;
+	HACCEL hAccelTable; //accelarator table descriptor
 
-	// Инициализация глобальных строк
+	// Global strings initialization
 	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadString(hInstance, IDC_PAINT, szWindowClass, MAX_LOADSTRING);
 	MyRegisterClass(hInstance);
@@ -42,7 +52,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_PAINT));
 
-	// Цикл основного сообщения:
+	// message waiting and processing loop
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
@@ -55,12 +65,10 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	return (int) msg.wParam;
 }
 
-
-
 //
-//  ФУНКЦИЯ: MyRegisterClass()
+//  FUNCTION: MyRegisterClass()
 //
-//  НАЗНАЧЕНИЕ: регистрирует класс окна.
+//  PURPOSE: registrates window class.
 //
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
@@ -68,6 +76,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 
+	//registration window's attributes
 	wcex.style			= CS_HREDRAW | CS_VREDRAW;
 	wcex.lpfnWndProc	= WndProc;
 	wcex.cbClsExtra		= 0;
@@ -84,22 +93,22 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 }
 
 //
-//   ФУНКЦИЯ: InitInstance(HINSTANCE, int)
+//   FUNCTION: InitInstance(HINSTANCE, int)
 //
-//   НАЗНАЧЕНИЕ: сохраняет обработку экземпляра и создает главное окно.
+//   PURPOSE: It retains instance processing and creates the main window
 //
-//   КОММЕНТАРИИ:
+//   COMMENTS:
 //
-//        В данной функции дескриптор экземпляра сохраняется в глобальной переменной, а также
-//        создается и выводится на экран главное окно программы.
+//       In this function, the instance handle is stored in a global variable, and also
+//        program's main window is created and displayed
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-   HWND hWnd;
+   HWND hWnd; //window's descriptor
 
-   hInst = hInstance; // Сохранить дескриптор экземпляра в глобальной переменной
+   hInst = hInstance; // saving instance descriptor in gloabal variable
 
-   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,		
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
 
    if (!hWnd)
@@ -114,29 +123,71 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 }
 
 //
-//  ФУНКЦИЯ: WndProc(HWND, UINT, WPARAM, LPARAM)
+//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
-//  НАЗНАЧЕНИЕ:  обрабатывает сообщения в главном окне.
+//  PURPOSE:  handles messages in main window
 //
-//  WM_COMMAND	- обработка меню приложения
-//  WM_PAINT	-Закрасить главное окно
-//  WM_DESTROY	 - ввести сообщение о выходе и вернуться.
+//  WM_COMMAND	- message about choice menu tab
+//  WM_PAINT	- message about the need to redraw the client area of the window
+//  WM_DESTROY	 - message about exit and return
 //
 //
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	int wmId, wmEvent;
-	PAINTSTRUCT ps;
-	HDC hdc;
+	PAINTSTRUCT ps;	//contains information that can be used to paint the client area of a window owned by that application
+	HDC hdc; // = GetDC(hWnd); // getting handle device context
+
+	BOOL bRet = FALSE;
+	BOOL bCmd = FALSE;
 
 	switch (message)
 	{
+	/*case WM_CREATE:
+		menuBar = LoadMenu(NULL, MAKEINTRESOURCE(ID_PAINT));
+		SetMenu(hWnd, menuBar);
+		break;*/
+	case WM_INITDIALOG:
+		hPen = CreatePen(PS_SOLID, 3, RGB(128, 0, 0));
+		//bRet = TRUE;
+		break; 
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
-		// Разобрать выбор в меню:
+		// Choice in menu:
 		switch (wmId)
 		{
+		case ID_BRUSH_COLOR:
+
+			ZeroMemory(&colorDlg, sizeof(colorDlg));
+			colorDlg.lStructSize = sizeof(CHOOSECOLOR); 
+			colorDlg.hwndOwner = hWnd;
+			colorDlg.lpCustColors = (LPDWORD)colors;  //A pointer to an array of 16 values that contain red, green, blue (RGB) values
+			colorDlg.rgbResult = rgbCurrent; // specifies the color initially selected when the dialog box is created
+			colorDlg.Flags = CC_RGBINIT;
+
+			if (ChooseColor(&colorDlg))
+			{
+				DeleteBrush(hBrush);
+				hBrush = CreateSolidBrush(colorDlg.rgbResult);
+			}
+			break;
+		case ID_PEN_COLOR:
+
+			ZeroMemory(&colorDlg, sizeof(colorDlg));
+			colorDlg.lStructSize = sizeof(CHOOSECOLOR);
+			colorDlg.hwndOwner = hWnd;
+			colorDlg.lpCustColors = (LPDWORD)colors;
+			colorDlg.rgbResult = rgbCurrent;
+			colorDlg.Flags = CC_RGBINIT;
+
+			if (ChooseColor(&colorDlg))
+			{
+				rgbCurrent = colorDlg.rgbResult;
+				DeletePen(hPen);
+				hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
+			}
+			break;
 		case IDM_ABOUT:
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
@@ -147,10 +198,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 		break;
-	case WM_PAINT:
-		hdc = BeginPaint(hWnd, &ps);
-		// TODO: добавьте любой код отрисовки...
-		EndPaint(hWnd, &ps);
+	//Handles pushing left mouse button
+	case WM_LBUTTONDOWN:
+		fDraw = TRUE;
+		ptPrevious.x = LOWORD(lParam);
+		ptPrevious.y = HIWORD(lParam);
+		break;
+	case WM_LBUTTONUP:
+		if (fDraw)
+		{
+			hdc = GetDC(hWnd);
+			MoveToEx(hdc, ptPrevious.x, ptPrevious.y, NULL); //set the current pen position to the point with  ptPrevious coordinates
+			LineTo(hdc, LOWORD(lParam), HIWORD(lParam));
+			ReleaseDC(hWnd, hdc);
+			fDraw = FALSE;
+		}
+		break;
+	case WM_MOUSEMOVE:
+		if (fDraw)
+		{
+			hdc = GetDC(hWnd);
+			SelectBrush(hdc, hBrush);
+			SelectPen(hdc, hPen);
+			MoveToEx(hdc, ptPrevious.x, ptPrevious.y, NULL);
+			LineTo
+				(
+				hdc,
+				ptPrevious.x = LOWORD(lParam),
+				ptPrevious.y = HIWORD(lParam)
+				);
+			ReleaseDC(hWnd, hdc);
+		}
+		break;
+	case ID_SIZE_1: case ID_SIZE_2: case ID_SIZE_3: case ID_SIZE_4:
+		penWidth = LOWORD(wParam) - ID_SIZE_1 + 1;
+		DeletePen(hPen);
+		hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
 		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
@@ -158,10 +241,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
+
+	//ReleaseDC(hWnd, hdc);
 	return 0;
 }
 
-// Обработчик сообщений для окна "О программе".
+// Handler messages "About"
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(lParam);

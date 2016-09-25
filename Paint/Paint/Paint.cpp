@@ -20,7 +20,8 @@ LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 //COLORREF ShowColorDialog(HWND, COLORREF);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 void				Draw(HDC hdc, int toolID);
-void				OnDropFiles(HWND hWnd, HDROP hDrop);
+void				OnDropFiles(HWND hWnd, HDROP hDrop, HDC hdc);
+void				OpenUserFile(HWND hWnd, HENHMETAFILE hemf, OPENFILENAME fileName, HDC hdc);
 
 HDC dcMeta;		//descriptor which remembers user's activity 
 static RECT rect;  // rectangle for drawing 
@@ -179,12 +180,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	PRINTDLG printDlg;
 	int wheelDelta = 0;
 
-	DragAcceptFiles(hWnd, true);
-
 	switch (message)
 	{
 	case WM_CREATE:
 		dcMeta = InitializeTempDC(hWnd, hdc);
+		DragAcceptFiles(hWnd, true);
 		break;
 	case WM_INITDIALOG:
 		hPen = CreatePen(PS_SOLID, 3, RGB(128, 0, 0));
@@ -229,6 +229,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			penWidth = LOWORD(wParam) - ID_SIZE_1 + 1;
 			DeletePen(hPen);
 			hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
+			break;
+		case ID_NEW:
+			GetClientRect(hWnd, &rect);
+			FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW + 1));
 			break;
 		case ID_SAVE:
 
@@ -279,18 +283,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if (GetOpenFileName(&fileName) == TRUE)
 			{
-
 				hemf = GetEnhMetaFile(fileName.lpstrFile);
-				GetClientRect(hWnd, &rect);
-				FillRect(hdc, &rect, SelectBrush(hdc, WHITE_BRUSH));
-				FillRect(dcMeta, &rect, SelectBrush(dcMeta, WHITE_BRUSH));
-				dbg = PlayEnhMetaFile(hdc, hemf, &rect);
-				DeleteEnhMetaFile(hemf);
-
-				hemf = GetEnhMetaFile(fileName.lpstrFile);
-				GetClientRect(hWnd, &rect);
-				dbg = PlayEnhMetaFile(dcMeta, hemf, &rect);
-				DeleteEnhMetaFile(hemf);
+				OpenUserFile(hWnd, hemf, fileName, hdc);
 			}
 			break;
 		case ID_PRINT:
@@ -411,7 +405,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_DROPFILES:
 		{
 			HDROP hDrop = (HDROP)wParam;
-			OnDropFiles(hWnd, hDrop);
+			OnDropFiles(hWnd, hDrop, hdc);
 		}
 		break;
 		/*Handles pressing key Esc and ends drawing polyfigures*/
@@ -465,16 +459,49 @@ void Draw(HDC hdc, int toolID){
 	}
 }
 
-void OnDropFiles(HWND hWnd,HDROP hDrop)
+void OnDropFiles(HWND hWnd,HDROP hDrop, HDC hdc)
 {
 	TCHAR szFileName[MAX_PATH];
+	TCHAR  *szFilter;
 	// function to retrieve a count of the files that were dropped and their names
 	DWORD dwCount = DragQueryFile(hDrop, 0xFFFFFFFF, szFileName, MAX_PATH);
 	for (int i = 0; i < dwCount; i++)
 	{
 		DragQueryFile(hDrop, i, szFileName, MAX_PATH);
+		szFilter = _T("EMF Files\0*.EMF\0\0");
+		OPENFILENAME fileName;
+		ZeroMemory(&fileName, sizeof(fileName));
+		fileName.lStructSize = sizeof(OPENFILENAME);
+		fileName.hwndOwner = hWnd;
+		fileName.lpstrFilter = szFilter;
+		fileName.lpstrFile = (LPWSTR)&szFileName;
+		fileName.nMaxFile = sizeof((LPWSTR)&szFileName);
+		fileName.lpstrFileTitle = (LPWSTR)NULL;
+		fileName.lpstrInitialDir = (LPWSTR)NULL;
+		fileName.lpstrTitle = szTitle;
+		fileName.nFilterIndex = 1;
+		fileName.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+		HENHMETAFILE hemf = GetEnhMetaFile(fileName.lpstrFile);
+		OpenUserFile(hWnd, hemf, fileName, hdc);
 	}
 	DragFinish(hDrop);
+
+	//szFile[0] = '\0';
+}
+
+void OpenUserFile(HWND hWnd, HENHMETAFILE hemf, OPENFILENAME fileName, HDC hdc){
+	BOOL dbg;
+	GetClientRect(hWnd, &rect);
+	FillRect(hdc, &rect, SelectBrush(hdc, WHITE_BRUSH));
+	FillRect(dcMeta, &rect, SelectBrush(dcMeta, WHITE_BRUSH));
+	dbg = PlayEnhMetaFile(hdc, hemf, &rect);
+	DeleteEnhMetaFile(hemf);
+
+	hemf = GetEnhMetaFile(fileName.lpstrFile);
+	GetClientRect(hWnd, &rect);
+	dbg = PlayEnhMetaFile(dcMeta, hemf, &rect);
+	DeleteEnhMetaFile(hemf);
 }
 
 // Handler messages "About"

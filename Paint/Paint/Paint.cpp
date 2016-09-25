@@ -3,6 +3,7 @@
 #include <windowsx.h>
 #include <commdlg.h>
 #include <string>
+#include <winspool.h>
 
 #define MAX_LOADSTRING 100
 
@@ -35,7 +36,6 @@ int toolID = ID_PEN;
 static std::wstring str(L"");
 bool isDrawn = false;
 static bool isFirst = true;
-
 
 
 
@@ -169,6 +169,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	PAINTSTRUCT ps;	//contains information that can be used to paint the client area of a window owned by that application
 	HDC hdc = GetDC(hWnd); // getting handle device context
 	
+	OPENFILENAME fileName;
+	TCHAR szFile[MAX_PATH], *szFilter, *szFileTitle, *szTitle;
+	HENHMETAFILE hemf, hemfc;
+	BOOL dbg;
+	PRINTDLG printDlg;
 
 	switch (message)
 	{
@@ -219,6 +224,108 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DeletePen(hPen);
 			hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
 			break;
+		case ID_SAVE:
+
+			szTitle = _T("Save as");
+			szFile[0] = '\0';
+			szFilter = _T("EMF Files\0*.EMF\0\0");
+
+			ZeroMemory(&fileName, sizeof(fileName));
+			fileName.lStructSize = sizeof(OPENFILENAME);
+			fileName.hwndOwner = hWnd;
+			fileName.lpstrFilter = szFilter;
+			fileName.lpstrFile = szFile;
+			fileName.nMaxFile = sizeof(szFile);
+			fileName.lpstrFileTitle = (LPWSTR)NULL;
+			fileName.lpstrInitialDir = (LPWSTR)NULL;
+			fileName.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+			fileName.lpstrTitle = szTitle;
+			//Creates a Save dialog box that lets the user specify the drive, directory, and name of a file to save.
+			if (GetSaveFileName(&fileName) == TRUE)
+			{
+				hemf = CloseEnhMetaFile(dcMeta);
+				hemfc = CopyEnhMetaFile(hemf, fileName.lpstrFile);
+				dbg = DeleteEnhMetaFile(hemf);
+				dcMeta = InitializeTempDC(hWnd, hdc);
+				dbg = GetClientRect(hWnd, &rect);
+				dbg = PlayEnhMetaFile(dcMeta, hemfc, &rect);
+				dbg = DeleteEnhMetaFile(hemfc);
+			}
+			break;
+		case ID_OPEN:
+			szTitle = _T("Open File");
+			szFile[0] = '\0';
+			szFilter = _T("EMF Files\0*.EMF\0\0");
+
+			ZeroMemory(&fileName, sizeof(fileName));
+			fileName.lStructSize = sizeof(OPENFILENAME);
+			fileName.hwndOwner = hWnd;
+			fileName.lpstrFilter = szFilter;
+			fileName.lpstrFile = szFile;
+			fileName.nMaxFile = sizeof(szFile);
+			fileName.lpstrFileTitle = (LPWSTR)NULL;
+			fileName.lpstrInitialDir = (LPWSTR)NULL;
+			fileName.lpstrTitle = szTitle;
+			fileName.nFilterIndex = 1;
+			fileName.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+			if (GetOpenFileName(&fileName) == TRUE)
+			{
+
+				hemf = GetEnhMetaFile(fileName.lpstrFile);
+				GetClientRect(hWnd, &rect);
+				FillRect(hdc, &rect, SelectBrush(hdc, WHITE_BRUSH));
+				FillRect(dcMeta, &rect, SelectBrush(dcMeta, WHITE_BRUSH));
+				dbg = PlayEnhMetaFile(hdc, hemf, &rect);
+				DeleteEnhMetaFile(hemf);
+
+				hemf = GetEnhMetaFile(fileName.lpstrFile);
+				GetClientRect(hWnd, &rect);
+				dbg = PlayEnhMetaFile(dcMeta, hemf, &rect);
+				DeleteEnhMetaFile(hemf);
+			}
+			break;
+		case ID_PRINT:
+			ZeroMemory(&printDlg, sizeof(printDlg));
+			printDlg.lStructSize = sizeof(PRINTDLG);
+			printDlg.hwndOwner = hWnd;
+			printDlg.hDevMode = NULL;
+			printDlg.hDevNames = NULL;
+			printDlg.Flags = PD_USEDEVMODECOPIESANDCOLLATE | PD_RETURNDC;
+			printDlg.nCopies = 1;
+			printDlg.nFromPage = 0xFFFF;
+			printDlg.nToPage = 0xFFFF;
+			printDlg.nMaxPage = 0XFFFF;
+			printDlg.nMinPage = 1;
+
+			if (PrintDlg(&printDlg) == TRUE)
+			{
+				DOCINFO info;
+				HANDLE handle;
+				DEVMODE *devMode = (DEVMODE*)GlobalLock(printDlg.hDevMode);
+
+				OpenPrinter(devMode->dmDeviceName, &handle, NULL);
+				ZeroMemory(&info, sizeof(DOCINFO));
+				info.cbSize = sizeof(DOCINFO);
+				info.lpszDatatype = _T("emf");
+				info.lpszDocName = _T("NewDoc.emf");
+				info.lpszOutput = _T("NewDoc.pdf");
+
+				StartDoc(printDlg.hDC, &info);
+				StartPage(printDlg.hDC);
+
+				hemf = CloseEnhMetaFile(dcMeta);
+				GetClientRect(hWnd, &rect);
+				PlayEnhMetaFile(printDlg.hDC, hemf, &rect);
+
+				EndPage(printDlg.hDC);
+				EndDoc(printDlg.hDC);
+
+				ClosePrinter(handle);
+
+				DeleteDC(printDlg.hDC);
+			}
+			break;
 		case IDM_ABOUT:
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
@@ -240,7 +347,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_LBUTTONUP:
 		end = MAKEPOINTS(lParam);
-
 		switch (toolID)
 		{
 		case ID_ELLIPSE:

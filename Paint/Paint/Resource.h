@@ -29,6 +29,9 @@
 #define ID_ELLIPSE				207
 #define ID_POLYGONE     208
 #define ID_TEXT         209
+#define ID_OPEN			2010
+#define ID_SAVE         2011
+#define ID_PRINT		2012
 #endif
 // Следующие стандартные значения для новых объектов
 //

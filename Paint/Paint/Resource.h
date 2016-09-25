@@ -19,10 +19,16 @@
 #define ID_BRUSH_COLOR			200
 #define ID_PEN_COLOR			201
 #define ID_PAINT				203
-#define ID_SIZE_1				3000
-#define ID_SIZE_2				3010
-#define ID_SIZE_3				3020
-#define ID_SIZE_4				3030
+#define ID_SIZE_1				32775
+#define ID_SIZE_2				32778
+#define ID_SIZE_3				32781
+#define ID_SIZE_4				32784
+#define ID_PEN					204
+#define ID_LINE					205
+#define ID_RECTANGLE			206
+#define ID_ELLIPSE				207
+#define ID_POLYGONE     208
+#define ID_TEXT         209
 #endif
 // Следующие стандартные значения для новых объектов
 //

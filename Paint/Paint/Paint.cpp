@@ -2,6 +2,7 @@
 #include "Paint.h"
 #include <windowsx.h>
 #include <commdlg.h>
+#include <string>
 
 #define MAX_LOADSTRING 100
 
@@ -15,8 +16,10 @@ BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 //COLORREF ShowColorDialog(HWND, COLORREF);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
+void				Draw(HDC hdc, int toolID);
 
-
+HDC dcMeta;		//descriptor which remembers user's activity 
+static RECT rect;  // rectangle for drawing 
 HPEN hPen = NULL;
 HBRUSH hBrush = NULL;
 BOOL fDraw = FALSE;
@@ -24,8 +27,16 @@ POINT ptPrevious = { 0 };
 CHOOSECOLOR colorDlg; // struct of standart color dialog
 COLORREF colors[16]; //palette
 static DWORD rgbCurrent;
-static HMENU menuBar;
 static int penWidth = 1;
+static POINTS start, end;
+static POINT *points;
+static int pts = 0;
+int toolID = ID_PEN;
+static std::wstring str(L"");
+bool isDrawn = false;
+static bool isFirst = true;
+
+
 
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance, // application instance descriptor	
@@ -122,6 +133,26 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+HDC InitializeTempDC(HWND hWnd, HDC hdc)
+{
+	int iWidthMM, iWidthRes, iHeightMM, iHeightRes;
+
+	iWidthMM = GetDeviceCaps(hdc, HORZSIZE);
+	iHeightMM = GetDeviceCaps(hdc, VERTSIZE);
+	iWidthRes = GetDeviceCaps(hdc, HORZRES);
+	iHeightRes = GetDeviceCaps(hdc, VERTRES);
+
+	GetClientRect(hWnd, &rect);
+
+	rect.bottom = (rect.bottom * iHeightMM * 100) / iHeightRes;
+	rect.top = (rect.top * iHeightMM * 100) / iHeightRes;
+	rect.left = (rect.left * iWidthMM * 100) / iWidthRes;
+	rect.right = (rect.right * iWidthMM * 100) / iWidthRes;
+
+	return CreateEnhMetaFile(hdc, (LPWSTR)NULL, &rect, (LPWSTR)NULL);
+
+}
+
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -136,25 +167,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;	//contains information that can be used to paint the client area of a window owned by that application
-	HDC hdc; // = GetDC(hWnd); // getting handle device context
-
-	BOOL bRet = FALSE;
-	BOOL bCmd = FALSE;
+	HDC hdc = GetDC(hWnd); // getting handle device context
+	
 
 	switch (message)
 	{
-	/*case WM_CREATE:
-		menuBar = LoadMenu(NULL, MAKEINTRESOURCE(ID_PAINT));
-		SetMenu(hWnd, menuBar);
-		break;*/
+	case WM_CREATE:
+		dcMeta = InitializeTempDC(hWnd, hdc);
+		break;
 	case WM_INITDIALOG:
 		hPen = CreatePen(PS_SOLID, 3, RGB(128, 0, 0));
-		//bRet = TRUE;
 		break; 
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
-		// Choice in menu:
 		switch (wmId)
 		{
 		case ID_BRUSH_COLOR:
@@ -188,6 +214,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
 			}
 			break;
+		case ID_SIZE_1: case ID_SIZE_2: case ID_SIZE_3: case ID_SIZE_4:
+			penWidth = LOWORD(wParam) - ID_SIZE_1 + 1;
+			DeletePen(hPen);
+			hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
+			break;
 		case IDM_ABOUT:
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
@@ -195,45 +226,92 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DestroyWindow(hWnd);
 			break;
 		default:
+			toolID = LOWORD(wParam);
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 		break;
 	//Handles pushing left mouse button
 	case WM_LBUTTONDOWN:
-		fDraw = TRUE;
-		ptPrevious.x = LOWORD(lParam);
-		ptPrevious.y = HIWORD(lParam);
+		if (toolID != ID_POLYGONE)
+		{
+			start = MAKEPOINTS(lParam);
+			isDrawn = false;
+		}
 		break;
 	case WM_LBUTTONUP:
-		if (fDraw)
+		end = MAKEPOINTS(lParam);
+
+		switch (toolID)
 		{
-			hdc = GetDC(hWnd);
-			MoveToEx(hdc, ptPrevious.x, ptPrevious.y, NULL); //set the current pen position to the point with  ptPrevious coordinates
-			LineTo(hdc, LOWORD(lParam), HIWORD(lParam));
-			ReleaseDC(hWnd, hdc);
-			fDraw = FALSE;
+		case ID_ELLIPSE:
+		case ID_RECTANGLE:
+		case ID_LINE:
+			Draw(hdc, toolID);
+			Draw(dcMeta, toolID);
+			isDrawn = false;
+			break;
+		case ID_TEXT:
+			start = end;
+			str.clear();
+			break;
+		case ID_POLYGONE:
+			if (isFirst)
+			{
+				pts = 0;
+				points = (POINT*)calloc(50, sizeof(POINT));
+				POINTSTOPOINT(points[pts], end);
+				isFirst = false;
+			}
+			else
+			{
+				pts++;
+				POINTSTOPOINT(points[pts], end);
+			}
+			Draw(hdc, toolID);
+			Draw(dcMeta, toolID);
+			break;
 		}
 		break;
 	case WM_MOUSEMOVE:
-		if (fDraw)
+
+		if (wParam & MK_LBUTTON)
 		{
-			hdc = GetDC(hWnd);
-			SelectBrush(hdc, hBrush);
-			SelectPen(hdc, hPen);
-			MoveToEx(hdc, ptPrevious.x, ptPrevious.y, NULL);
-			LineTo
-				(
-				hdc,
-				ptPrevious.x = LOWORD(lParam),
-				ptPrevious.y = HIWORD(lParam)
-				);
-			ReleaseDC(hWnd, hdc);
+			if (toolID == ID_PEN)
+			{
+				end = MAKEPOINTS(lParam);
+				Draw(hdc, toolID);
+				Draw(dcMeta, toolID);
+				start = end;
+			}
+			else
+			{
+				SetROP2(hdc, R2_NOTXORPEN); //// sets DrawMode, which indicates how object's inner color will combine with other's colors
+				if (isDrawn)
+					Draw(hdc, toolID);
+				end = MAKEPOINTS(lParam);
+				Draw(hdc, toolID);
+				isDrawn = true;
+			}
 		}
 		break;
-	case ID_SIZE_1: case ID_SIZE_2: case ID_SIZE_3: case ID_SIZE_4:
-		penWidth = LOWORD(wParam) - ID_SIZE_1 + 1;
-		DeletePen(hPen);
-		hPen = CreatePen(PS_SOLID, penWidth, rgbCurrent);
+		/*Handles pressing key Esc and ends drawing polyfigures*/
+	case WM_KEYDOWN:
+
+		if (wParam == VK_ESCAPE && !isFirst)
+		{
+			isFirst = true;
+			Draw(hdc, toolID);
+			Draw(dcMeta, toolID);
+			free(points);
+		}
+		break;
+	case WM_CHAR:
+		if (toolID == ID_TEXT)
+		{
+			str.append((wchar_t*)(&wParam));
+			TextOut(hdc, start.x, start.y, (LPCWSTR)(&str[0]), str.length());
+			TextOut(dcMeta, start.x, start.y, (LPCWSTR)(&str[0]), str.length());
+		}
 		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
@@ -242,8 +320,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 
-	//ReleaseDC(hWnd, hdc);
+	ReleaseDC(hWnd, hdc);
 	return 0;
+}
+
+void Draw(HDC hdc, int toolID){
+	SelectBrush(hdc, hBrush);
+	SelectPen(hdc, hPen);
+	switch (toolID)
+	{
+	case ID_PEN:
+	case ID_LINE:
+		MoveToEx(hdc, start.x, start.y, NULL);
+		LineTo(hdc, end.x, end.y);
+		break;
+	case ID_POLYGONE:
+		Polyline(hdc, points, pts + 1);
+		break;
+	case ID_RECTANGLE:
+		Rectangle(hdc, start.x, start.y, end.x, end.y);
+		break;
+	case ID_ELLIPSE:
+		Ellipse(hdc, start.x, start.y, end.x, end.y);
+		break;
+	}
 }
 
 // Handler messages "About"

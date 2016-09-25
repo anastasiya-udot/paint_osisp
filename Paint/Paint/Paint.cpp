@@ -4,6 +4,8 @@
 #include <commdlg.h>
 #include <string>
 #include <winspool.h>
+#include <Shellapi.h>
+
 
 #define MAX_LOADSTRING 100
 
@@ -18,6 +20,7 @@ LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 //COLORREF ShowColorDialog(HWND, COLORREF);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 void				Draw(HDC hdc, int toolID);
+void				OnDropFiles(HWND hWnd, HDROP hDrop);
 
 HDC dcMeta;		//descriptor which remembers user's activity 
 static RECT rect;  // rectangle for drawing 
@@ -174,6 +177,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	HENHMETAFILE hemf, hemfc;
 	BOOL dbg;
 	PRINTDLG printDlg;
+	int wheelDelta = 0;
+
+	DragAcceptFiles(hWnd, true);
 
 	switch (message)
 	{
@@ -243,7 +249,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			//Creates a Save dialog box that lets the user specify the drive, directory, and name of a file to save.
 			if (GetSaveFileName(&fileName) == TRUE)
 			{
+				//closes an enhanced-metafile device context and returns a handle that identifies an enhanced-format metafile.
 				hemf = CloseEnhMetaFile(dcMeta);
+				//copies the contents of an enhanced-format metafile to a specified file
 				hemfc = CopyEnhMetaFile(hemf, fileName.lpstrFile);
 				dbg = DeleteEnhMetaFile(hemf);
 				dcMeta = InitializeTempDC(hWnd, hdc);
@@ -400,9 +408,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 		}
 		break;
+	case WM_DROPFILES:
+		{
+			HDROP hDrop = (HDROP)wParam;
+			OnDropFiles(hWnd, hDrop);
+		}
+		break;
 		/*Handles pressing key Esc and ends drawing polyfigures*/
 	case WM_KEYDOWN:
-
 		if (wParam == VK_ESCAPE && !isFirst)
 		{
 			isFirst = true;
@@ -450,6 +463,18 @@ void Draw(HDC hdc, int toolID){
 		Ellipse(hdc, start.x, start.y, end.x, end.y);
 		break;
 	}
+}
+
+void OnDropFiles(HWND hWnd,HDROP hDrop)
+{
+	TCHAR szFileName[MAX_PATH];
+	// function to retrieve a count of the files that were dropped and their names
+	DWORD dwCount = DragQueryFile(hDrop, 0xFFFFFFFF, szFileName, MAX_PATH);
+	for (int i = 0; i < dwCount; i++)
+	{
+		DragQueryFile(hDrop, i, szFileName, MAX_PATH);
+	}
+	DragFinish(hDrop);
 }
 
 // Handler messages "About"
